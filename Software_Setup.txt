@@ -1,3 +1,5 @@
+// Directions to Setup Scala and Spark on MAC OS //
+
 1. Install Homebrew
 2. Install Xcode-select
 Type in terminal:

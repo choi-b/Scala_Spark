@@ -2,9 +2,9 @@
 //Date: 4.4.2020
 //Basic Scala Programming Notes
 
-//////////////////
-// FLOW CONTROL //
-//////////////////
+///////////////////
+// FLOW CONTROL ///
+///////////////////
 
 // val person = "Jose"
 //
@@ -64,4 +64,16 @@ while(x < 5){
   println(s"x is currently $x")
   println("x is still less than 5, adding 1 to x")
   x = x+1
+}
+
+// Break statement //
+import util.control.Breaks._
+
+var y = 0
+
+while(y < 10){
+  println(s"y is currently $y")
+  println("y is still less than 10, add 1 to y")
+  y = y+1
+  if(y==3) break
 }
