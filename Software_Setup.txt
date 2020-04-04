@@ -1,0 +1,18 @@
+1. Install Homebrew
+2. Install Xcode-select
+Type in terminal:
+
+xcode-select --install
+
+3. Use Home-brew to install Java
+Type in terminal:
+
+brew cask install java
+
+4. Use Homebrew to install Small
+
+brew install scala
+
+5. Use Home-brew to install Apache Spark
+
+brew install apache-spark
