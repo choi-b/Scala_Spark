@@ -1,10 +1,11 @@
 //Programmer: Brian Choi
-//Date: 4.8.2020
+//Date Created: 4.8.2020
 //Notes on Spark Machine Learning
 
-//1. Linear Regression
-//data: US housing data
-//predict: price of the house
+////////////////////////////
+/// 1. Linear Regression ///
+/// data: US housing data //
+/// predict: price of the house //
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.ml.regression.LinearRegression
@@ -55,3 +56,115 @@ trainingSummary.rootMeanSquaredError
 
 
 //////////////////////////////////////////////////
+//2. Classification (Logistic Regression)
+
+import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.sql.SparkSession
+
+//<Example of using an 'object'>
+//object lets you package a bunch of functions together
+object LogisticRegressionWithElasticNetExample {
+
+  def main(): Unit = {
+    val spark = SparkSession
+      .builder
+      .appName("LogisticRegressionWithElasticNetExample")
+      .getOrCreate()
+
+    //load training data
+    val training = spark.read.format("libsvm").load("sample_libsvm_data.txt")
+
+    val lr = new LogisticRegression()
+      .setMaxIter(10)
+      .setRegParam(0.3)
+      .setElasticNetParam(0.8)
+
+    //fit the model
+    val lrModel = lr.fit(training)
+
+    //print coeff and intercept for Logistic Reg
+    println(s"Coefficients: ${lrModel.coefficients} Intercept: ${lrModel.intercept}")
+
+    //stops the Spark session
+    spark.stop()
+  }
+}
+
+//Example
+//data: Titanic Dataset
+//predict: Predict who survived or not
+
+import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.sql.SparkSession
+
+//to ignore a bunch of warnings
+import org.apache.log4j._
+Logger.getLogger("org").setLevel(Level.ERROR)
+
+val spark = SparkSession.builder().getOrCreate()
+
+//read in titanic data set
+val data = spark.read.option("header","true").option("inferSchema","true").format("csv").load("titanic.csv")
+
+//to show the columns we have
+data.printSchema()
+
+
+//Grab the data that we want to use
+//hit data.columns in the shell to easily copy column names
+val logregdataall = (data.select(data("Survived").as("label"),
+$"Pclass", $"Name", $"Sex", $"Age", $"SibSp", $"Parch", $"Fare", $"Embarked"))
+
+val logregdata = logregdataall.na.drop()
+
+//use StringIndexer & OneHotEncoder
+//Import multiple features to use
+import org.apache.spark.ml.feature.{VectorAssembler, StringIndexer, VectorIndexer, OneHotEncoder}
+import org.apache.spark.ml.linalg.Vectors
+
+//Converting strings into numerical values
+val genderIndexer = new StringIndexer().setInputCol("Sex").setOutputCol("SexIndex")
+val embarkIndexer = new StringIndexer().setInputCol("Embarked").setOutputCol("EmbarkIndex")
+
+//Convert numerical values into One Hot Encoding (0 or 1)
+val genderEncoder = new OneHotEncoder().setInputCol("SexIndex").setOutputCol("SexVec")
+val embarkEncoder = new OneHotEncoder().setInputCol("EmbarkIndex").setOutputCol("EmbarkVec")
+
+//(label, features)
+
+val assembler = (new VectorAssembler().
+                  setInputCols(Array("Pclass","SexVec","Age","SibSp",
+                  "Parch","Fare","EmbarkVec")).setOutputCol("features"))
+//set these as an output (the features)
+
+//Split train into train & test
+val Array(training, test) = logregdata.randomSplit(Array(0.7, 0.3), seed = 12345) //70 % are training
+
+//Set up the pipeline
+import org.apache.spark.ml.Pipeline
+
+val lr = new LogisticRegression()
+
+// to make it easier to put in raw data and execute process all at once
+val pipeline = new Pipeline().setStages(Array(genderIndexer, embarkIndexer,
+                                          genderEncoder, embarkEncoder, assembler, lr))
+
+val model = pipeline.fit(training)
+
+//get results on test data
+val results = model.transform(test)
+
+//////////////////////
+// Model Evaluation //
+//////////////////////
+
+import org.apache.spark.mllib.evaluation.MulticlassMetrics
+
+//use results.printSchema() to check the original & new columns (features, probability, prediction)
+val predictionAndLabels = results.select($"prediction", $"label").as[(Double,Double)].rdd
+
+val metrics = new MulticlassMetrics(predictionAndLabels)
+//MulticlassMetrics is a bit broken,and will probably not be fixed since it's the old rdd method
+
+println("Confusion matrix:")
+println(metrics.confusionMatrix)
