@@ -55,8 +55,9 @@ trainingSummary.r2
 trainingSummary.rootMeanSquaredError
 
 
-//////////////////////////////////////////////////
-//2. Classification (Logistic Regression)
+///////////////////////////////////////////////////
+//2. Classification (Logistic Regression)/////////
+/////////////////////////////////////////////////
 
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.sql.SparkSession
@@ -154,10 +155,6 @@ val model = pipeline.fit(training)
 //get results on test data
 val results = model.transform(test)
 
-//////////////////////
-// Model Evaluation //
-//////////////////////
-
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 
 //use results.printSchema() to check the original & new columns (features, probability, prediction)
@@ -168,3 +165,80 @@ val metrics = new MulticlassMetrics(predictionAndLabels)
 
 println("Confusion matrix:")
 println(metrics.confusionMatrix)
+
+//////////////////////////
+// 3. Model Evaluation //
+////////////////////////
+
+import org.apache.spark.ml.evaluation.RegressionEvaluator
+import org.apache.spark.ml.regression.LinearRegression
+import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
+
+// <Documentation Example> //
+val data = spark.read.format("libsvm").load("sample_linear_regression_data.txt")
+
+// train test split
+val Array(training, test) = data.randomSplit(Array(0.9,0.1),
+                                             seed=12345) //90% training, 10% test
+
+val lr = new LinearRegression()
+
+val paramGrid = new ParamGridBuilder().addGrid(lr.regParam, Array(0.1,0.01)).addGrid(lr.fitIntercept).addGrid(lr.elasticNetParam, Array(0.0,0.5,1.0)).build()
+//explore parameters with lr. + tab
+
+//Run train validation split
+val trainValidationSplit = new TrainValidationSplit().setEstimator(lr).setEvaluator(new RegressionEvaluator()).setEstimatorParamMaps(paramGrid).setTrainRatio(0.8)
+
+val model = trainValidationSplit.fit(training)
+
+model.transform(test).select("features", "label", "prediction").show()
+//model.bestModel can return the best model.
+
+
+// <Revisiting the Housing Price Example> //
+import org.apache.spark.ml.evaluation.RegressionEvaluator
+import org.apache.spark.ml.regression.LinearRegression
+import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
+
+import org.apache.log4j._
+Logger.getLogger("org").setLevel(Level.ERROR)
+
+import org.apache.spark.sql.SparkSession
+val spark = SparkSession.builder().getOrCreate()
+
+//Read data
+val data = spark.read.option("header","true").option("inferSchema","true").format("csv").load("USA_Housing.csv")
+
+import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.ml.linalg.Vectors
+
+val df = data.select(data("Price").as("label"),$"Avg Area Income", $"Avg Area House Age",
+$"Avg Area Number of Rooms", $"Avg Area Number of Bedrooms", $"Area Population")
+
+val assembler = new VectorAssembler().setInputCols(Array("Avg Area Income", "Avg Area House", "Avg Area Number of Rooms", "Avg Area Number of Bedrooms", "Area Population")).setOutputCol("features")
+
+//transform the df using the assembler
+val output = assembler.transform(df).select($"label", $"features")
+
+
+// Training and Test Data
+val Array(training, test) = output.select("label", "features").randomSplit(Array(0.7,0.3),seed=12345)
+
+//Model
+val lr = new LinearRegression()
+
+//ParamGrid - added a regularization parameter (just included two extreme values to compare the models)
+val paramGrid = new ParamGridBuilder().addGrid(lr.regParam, Array(10000,0.1)).build()
+
+//Train split (holdout)
+val trainvalsplit = (new TrainValidationSplit()
+                     .setEstimator(lr)
+                     .setEvaluator(new RegressionEvaluator().setMetricName("r2")) //want the R^2 metric
+                     .setEstimatorParamMaps(paramGrid)
+                     .setTrainRatio(0.8))
+
+val model = trainvalsplit.fit(training)
+
+model.transform(test).select("features","label","prediction").show()
+//model.validationMetrics
+//current regularization params aren't too diff, play around with it.
