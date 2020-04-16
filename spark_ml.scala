@@ -55,9 +55,9 @@ trainingSummary.r2
 trainingSummary.rootMeanSquaredError
 
 
-///////////////////////////////////////////////////
-//2. Classification (Logistic Regression)/////////
-/////////////////////////////////////////////////
+////////////////////////////////////////////
+//2. Classification (Logistic Regression)///
+////////////////////////////////////////////
 
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.sql.SparkSession
@@ -166,9 +166,9 @@ val metrics = new MulticlassMetrics(predictionAndLabels)
 println("Confusion matrix:")
 println(metrics.confusionMatrix)
 
-//////////////////////////
+/////////////////////////
 // 3. Model Evaluation //
-////////////////////////
+/////////////////////////
 
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.regression.LinearRegression
@@ -242,3 +242,63 @@ val model = trainvalsplit.fit(training)
 model.transform(test).select("features","label","prediction").show()
 //model.validationMetrics
 //current regularization params aren't too diff, play around with it.
+
+
+///////////////////
+// 4. Clustering //
+///////////////////
+
+import org.apache.spark.sql.SparkSession
+import org.apache.log4j._
+Logger.getLogger("org").setLevel(Level.ERROR)
+
+val spark = SparkSession.builder().getOrCreate()
+
+//Import clustering algorithm
+import org.apache.spark.ml.clustering.KMeans
+
+val dataset = spark.read.format("libsvm").load("sample_kmeans_data.txt")
+
+//Train a k-means model.
+val kmeans = new KMeans().setK(2).setSeed(1L)
+val model = kmeans.fit(dataset)
+
+//Evaluate clustering by computing within set sum of squared errors (WSSSE)
+val WSSSE = model.computeCost(dataset)
+println(s"Within Set Sum of Squared Errors = $WSSSE")
+
+//show results
+println("Cluster Centers:")
+model.clusterCenters.foreach(println) //print for each cluster center
+
+
+///////////////////////////////////////////
+// 5. Principal Component Analysis (PCA) //
+///////////////////////////////////////////
+
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.ml.feature.PCA
+import org.apache.spark.ml.linalg.Vectors
+
+//SparkSession
+val spark = SparkSession.builder().appName("PCA_Example").getOrCreate()
+
+//Create some data
+val data = Array(
+  Vectors.sparse(5, Seq((1, 1.0), (3, 7.0))),
+  Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
+  Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
+)
+
+//Perform the operation
+val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("features")
+val pca = (new PCA()
+  .setInputCol("features")
+  .setOutputCol("pcaFeatures")
+  .setK(3) //number of components
+  .fit(df))
+
+//Transform and check out results
+val pcaDF = pca.transform(df)
+val result = pcaDF.select("pcaFeatures")
+result.show()
